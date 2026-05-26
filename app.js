@@ -66,7 +66,7 @@ function rebalanceSettings() {
   if (selectedTotal > capacity) {
     elements.hintText.textContent = `当前选择 ${selectedTotal} 人，容量 ${capacity} 人。超出人员会放入“待安排”队伍，可继续手动调整。`;
   } else {
-    elements.hintText.textContent = "提示：自动分队后，可以用“移动”按钮把人员调整到其他队伍。";
+    elements.hintText.textContent = "提示：自动分队后，可以拖动人员卡片到其他队伍。";
   }
 }
 
@@ -123,6 +123,25 @@ function renderTeams() {
   state.teams.forEach((team, teamIndex) => {
     const card = document.createElement("article");
     card.className = "team-card";
+    card.dataset.teamIndex = String(teamIndex);
+
+    card.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      card.classList.add("is-drag-over");
+    });
+
+    card.addEventListener("dragleave", (event) => {
+      if (!card.contains(event.relatedTarget)) {
+        card.classList.remove("is-drag-over");
+      }
+    });
+
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      card.classList.remove("is-drag-over");
+      handleDrop(event, teamIndex);
+    });
 
     const header = document.createElement("div");
     header.className = "team-header";
@@ -140,37 +159,41 @@ function renderTeams() {
     team.members.forEach((member) => {
       const item = document.createElement("li");
       item.className = "team-member";
+      item.draggable = true;
+      item.addEventListener("dragstart", (event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData(
+          "application/json",
+          JSON.stringify({
+            memberId: member.id,
+            fromTeamIndex: teamIndex,
+          }),
+        );
+        event.dataTransfer.setData("text/plain", member.id);
+        item.classList.add("is-dragging");
+      });
+      item.addEventListener("dragend", () => {
+        item.classList.remove("is-dragging");
+        document.querySelectorAll(".team-card.is-drag-over").forEach((teamCard) => {
+          teamCard.classList.remove("is-drag-over");
+        });
+      });
 
       const name = document.createElement("span");
       name.textContent = member.name;
 
-      const controls = document.createElement("div");
-      controls.className = "move-controls";
+      const dragHandle = document.createElement("span");
+      dragHandle.className = "drag-handle";
+      dragHandle.textContent = "拖动";
 
-      const moveSelect = document.createElement("select");
-      moveSelect.ariaLabel = `移动 ${member.name} 到其他队伍`;
-      moveSelect.innerHTML = `<option value="">移动到...</option>`;
-      state.teams.forEach((targetTeam, targetIndex) => {
-        if (targetIndex === teamIndex) return;
-        const option = document.createElement("option");
-        option.value = String(targetIndex);
-        option.textContent = targetTeam.name;
-        moveSelect.append(option);
-      });
-      moveSelect.addEventListener("change", () => {
-        if (moveSelect.value === "") return;
-        moveMember(member.id, teamIndex, Number(moveSelect.value));
-      });
-
-      controls.append(moveSelect);
-      item.append(name, controls);
+      item.append(name, dragHandle);
       list.append(item);
     });
 
     if (team.members.length === 0) {
       const empty = document.createElement("li");
       empty.className = "empty-state";
-      empty.innerHTML = "<p>该队暂时没人，可从相邻队伍移入。</p>";
+      empty.innerHTML = "<p>该队暂时没人，可把其他队伍的人员拖到这里。</p>";
       list.append(empty);
     }
 
@@ -178,6 +201,19 @@ function renderTeams() {
     card.append(header, list);
     elements.teamsContainer.append(card);
   });
+}
+
+function handleDrop(event, toTeamIndex) {
+  const payload = event.dataTransfer.getData("application/json");
+  if (!payload) return;
+
+  try {
+    const { memberId, fromTeamIndex } = JSON.parse(payload);
+    if (typeof memberId !== "string" || typeof fromTeamIndex !== "number") return;
+    moveMember(memberId, fromTeamIndex, toTeamIndex);
+  } catch {
+    // Ignore drops that did not originate from a team member card.
+  }
 }
 
 function renderSummary() {
