@@ -5,6 +5,8 @@ const state = {
   teams: [],
 };
 
+let pointerDrag = null;
+
 const elements = {
   addMemberForm: document.querySelector("#addMemberForm"),
   memberNameInput: document.querySelector("#memberNameInput"),
@@ -159,25 +161,6 @@ function renderTeams() {
     team.members.forEach((member) => {
       const item = document.createElement("li");
       item.className = "team-member";
-      item.draggable = true;
-      item.addEventListener("dragstart", (event) => {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData(
-          "application/json",
-          JSON.stringify({
-            memberId: member.id,
-            fromTeamIndex: teamIndex,
-          }),
-        );
-        event.dataTransfer.setData("text/plain", member.id);
-        item.classList.add("is-dragging");
-      });
-      item.addEventListener("dragend", () => {
-        item.classList.remove("is-dragging");
-        document.querySelectorAll(".team-card.is-drag-over").forEach((teamCard) => {
-          teamCard.classList.remove("is-drag-over");
-        });
-      });
 
       const name = document.createElement("span");
       name.textContent = member.name;
@@ -185,6 +168,14 @@ function renderTeams() {
       const dragHandle = document.createElement("span");
       dragHandle.className = "drag-handle";
       dragHandle.textContent = "拖动";
+
+      item.addEventListener("pointerdown", (event) => {
+        startPointerDrag(event, {
+          memberId: member.id,
+          fromTeamIndex: teamIndex,
+          sourceElement: item,
+        });
+      });
 
       item.append(name, dragHandle);
       list.append(item);
@@ -201,6 +192,105 @@ function renderTeams() {
     card.append(header, list);
     elements.teamsContainer.append(card);
   });
+}
+
+function clearDropTargets() {
+  document.querySelectorAll(".team-card.is-drag-over").forEach((teamCard) => {
+    teamCard.classList.remove("is-drag-over");
+  });
+}
+
+function getTeamIndexAtPoint(clientX, clientY) {
+  const target = document.elementFromPoint(clientX, clientY)?.closest(".team-card");
+  if (!target) return -1;
+  return Number(target.dataset.teamIndex);
+}
+
+function updateDragTarget(clientX, clientY) {
+  clearDropTargets();
+  const teamIndex = getTeamIndexAtPoint(clientX, clientY);
+  if (teamIndex < 0) return;
+
+  const target = document.querySelector(`.team-card[data-team-index="${teamIndex}"]`);
+  target?.classList.add("is-drag-over");
+}
+
+function moveDragGhost(clientX, clientY) {
+  if (!pointerDrag) return;
+
+  pointerDrag.ghost.style.left = `${clientX - pointerDrag.offsetX}px`;
+  pointerDrag.ghost.style.top = `${clientY - pointerDrag.offsetY}px`;
+}
+
+function finishPointerDrag(event) {
+  if (!pointerDrag) return;
+
+  const { memberId, fromTeamIndex, sourceElement, ghost } = pointerDrag;
+  const toTeamIndex = getTeamIndexAtPoint(event.clientX, event.clientY);
+
+  ghost.remove();
+  sourceElement.classList.remove("is-dragging");
+  document.body.classList.remove("is-pointer-dragging");
+  clearDropTargets();
+  pointerDrag = null;
+
+  document.removeEventListener("pointermove", handlePointerMove);
+  document.removeEventListener("pointerup", finishPointerDrag);
+  document.removeEventListener("pointercancel", cancelPointerDrag);
+
+  if (toTeamIndex >= 0 && toTeamIndex !== fromTeamIndex) {
+    moveMember(memberId, fromTeamIndex, toTeamIndex);
+  }
+}
+
+function cancelPointerDrag() {
+  if (!pointerDrag) return;
+
+  pointerDrag.ghost.remove();
+  pointerDrag.sourceElement.classList.remove("is-dragging");
+  document.body.classList.remove("is-pointer-dragging");
+  clearDropTargets();
+  pointerDrag = null;
+
+  document.removeEventListener("pointermove", handlePointerMove);
+  document.removeEventListener("pointerup", finishPointerDrag);
+  document.removeEventListener("pointercancel", cancelPointerDrag);
+}
+
+function handlePointerMove(event) {
+  if (!pointerDrag) return;
+
+  moveDragGhost(event.clientX, event.clientY);
+  updateDragTarget(event.clientX, event.clientY);
+}
+
+function startPointerDrag(event, { memberId, fromTeamIndex, sourceElement }) {
+  if (event.button !== undefined && event.button !== 0) return;
+
+  event.preventDefault();
+  const rect = sourceElement.getBoundingClientRect();
+  const ghost = sourceElement.cloneNode(true);
+  ghost.classList.add("drag-ghost");
+  ghost.style.width = `${rect.width}px`;
+  document.body.append(ghost);
+
+  pointerDrag = {
+    memberId,
+    fromTeamIndex,
+    sourceElement,
+    ghost,
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top,
+  };
+
+  sourceElement.classList.add("is-dragging");
+  document.body.classList.add("is-pointer-dragging");
+  moveDragGhost(event.clientX, event.clientY);
+  updateDragTarget(event.clientX, event.clientY);
+
+  document.addEventListener("pointermove", handlePointerMove);
+  document.addEventListener("pointerup", finishPointerDrag);
+  document.addEventListener("pointercancel", cancelPointerDrag);
 }
 
 function handleDrop(event, toTeamIndex) {
