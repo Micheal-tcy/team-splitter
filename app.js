@@ -1,4 +1,5 @@
 const STORAGE_KEY = "team-splitter-state-v1";
+const CLOUD_ENDPOINT = "https://mantledb.sh/v2/team-splitter-micheal-tcy/shared-state";
 
 const state = {
   members: [],
@@ -6,6 +7,8 @@ const state = {
 };
 
 let pointerDrag = null;
+let saveTimer = null;
+let lastCloudUpdatedAt = "";
 
 const elements = {
   addMemberForm: document.querySelector("#addMemberForm"),
@@ -22,6 +25,8 @@ const elements = {
   resetDemoBtn: document.querySelector("#resetDemoBtn"),
   teamsContainer: document.querySelector("#teamsContainer"),
   summaryText: document.querySelector("#summaryText"),
+  hintText: document.querySelector("#hintText"),
+  syncStatus: document.querySelector("#syncStatus"),
   emptyStateTemplate: document.querySelector("#emptyStateTemplate"),
 };
 
@@ -29,21 +34,119 @@ function createId() {
   return `member-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function loadState() {
+function setSyncStatus(message, type = "pending") {
+  elements.syncStatus.textContent = message;
+  elements.syncStatus.classList.toggle("is-online", type === "online");
+  elements.syncStatus.classList.toggle("is-error", type === "error");
+}
+
+function getSnapshot() {
+  return {
+    members: state.members,
+    teams: state.teams,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function applySnapshot(snapshot) {
+  state.members = Array.isArray(snapshot?.members) ? snapshot.members : [];
+  state.teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+}
+
+function saveLocalState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(getSnapshot()));
+}
+
+function loadLocalState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return;
 
   try {
-    const parsed = JSON.parse(saved);
-    state.members = Array.isArray(parsed.members) ? parsed.members : [];
-    state.teams = Array.isArray(parsed.teams) ? parsed.teams : [];
+    applySnapshot(JSON.parse(saved));
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
 }
 
+async function loadCloudState() {
+  setSyncStatus("正在同步云端...");
+
+  try {
+    const response = await fetch(CLOUD_ENDPOINT, { cache: "no-store" });
+
+    if (response.status === 404) {
+      await persistCloudState();
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Cloud load failed: ${response.status}`);
+    }
+
+    const snapshot = await response.json();
+    lastCloudUpdatedAt = snapshot.updatedAt || "";
+    applySnapshot(snapshot);
+    saveLocalState();
+    setSyncStatus("云端已同步", "online");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("云端连接失败，暂用本地数据", "error");
+  }
+}
+
+function queueCloudSave() {
+  clearTimeout(saveTimer);
+  setSyncStatus("正在保存到云端...");
+  saveTimer = setTimeout(persistCloudState, 350);
+}
+
+async function persistCloudState() {
+  const snapshot = getSnapshot();
+
+  try {
+    const response = await fetch(CLOUD_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(snapshot),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Cloud save failed: ${response.status}`);
+    }
+
+    lastCloudUpdatedAt = snapshot.updatedAt;
+    setSyncStatus("已保存到共享云端", "online");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("云端保存失败，已保存在本机", "error");
+  }
+}
+
+async function refreshCloudState() {
+  if (pointerDrag) return;
+
+  try {
+    const response = await fetch(CLOUD_ENDPOINT, { cache: "no-store" });
+    if (!response.ok) return;
+
+    const snapshot = await response.json();
+    if (!snapshot.updatedAt || snapshot.updatedAt === lastCloudUpdatedAt) return;
+
+    lastCloudUpdatedAt = snapshot.updatedAt;
+    applySnapshot(snapshot);
+    saveLocalState();
+    render();
+    setSyncStatus("已更新共享数据", "online");
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  saveLocalState();
+  queueCloudSave();
 }
 
 function getSelectedMembers() {
@@ -126,24 +229,6 @@ function renderTeams() {
     const card = document.createElement("article");
     card.className = "team-card";
     card.dataset.teamIndex = String(teamIndex);
-
-    card.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      card.classList.add("is-drag-over");
-    });
-
-    card.addEventListener("dragleave", (event) => {
-      if (!card.contains(event.relatedTarget)) {
-        card.classList.remove("is-drag-over");
-      }
-    });
-
-    card.addEventListener("drop", (event) => {
-      event.preventDefault();
-      card.classList.remove("is-drag-over");
-      handleDrop(event, teamIndex);
-    });
 
     const header = document.createElement("div");
     header.className = "team-header";
@@ -293,19 +378,6 @@ function startPointerDrag(event, { memberId, fromTeamIndex, sourceElement }) {
   document.addEventListener("pointercancel", cancelPointerDrag);
 }
 
-function handleDrop(event, toTeamIndex) {
-  const payload = event.dataTransfer.getData("application/json");
-  if (!payload) return;
-
-  try {
-    const { memberId, fromTeamIndex } = JSON.parse(payload);
-    if (typeof memberId !== "string" || typeof fromTeamIndex !== "number") return;
-    moveMember(memberId, fromTeamIndex, toTeamIndex);
-  } catch {
-    // Ignore drops that did not originate from a team member card.
-  }
-}
-
 function renderSummary() {
   const selectedTotal = getSelectedMembers().length;
   const assignedTotal = state.teams.reduce((total, team) => total + team.members.length, 0);
@@ -413,12 +485,19 @@ elements.teamSizeInput.addEventListener("input", rebalanceSettings);
 elements.teamCountInput.addEventListener("input", rebalanceSettings);
 
 elements.resetDemoBtn.addEventListener("click", () => {
-  if (!confirm("确定要清空所有人员和分队结果吗？")) return;
+  if (!confirm("确定要清空所有共享人员和分队结果吗？其他打开页面的人也会看到清空后的数据。")) return;
   state.members = [];
   state.teams = [];
   saveState();
   render();
 });
 
-loadState();
-render();
+async function initialize() {
+  loadLocalState();
+  render();
+  await loadCloudState();
+  render();
+  setInterval(refreshCloudState, 8000);
+}
+
+initialize();

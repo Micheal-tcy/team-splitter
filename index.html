@@ -12,9 +12,12 @@
         <div>
           <p class="eyebrow">Team Splitter</p>
           <h1>队伍分配工具</h1>
-          <p class="hero-text">维护人员名单，选择参与人员，按每队人数和队伍数量自动分队，并支持手动调整结果。</p>
+          <p class="hero-text">维护人员名单，选择参与人员，按每队人数和队伍数量自动分队，并支持手动调整结果。数据会保存到公开共享房间，其他人打开同一页面可共享。</p>
         </div>
-        <button id="resetDemoBtn" class="ghost-button" type="button">清空当前数据</button>
+        <div class="hero-actions">
+          <span id="syncStatus" class="sync-status">正在连接云端...</span>
+          <button id="resetDemoBtn" class="ghost-button" type="button">清空共享数据</button>
+        </div>
       </section>
 
       <section class="panel grid-two">
@@ -54,7 +57,7 @@
             随机打乱参与人员后分队
           </label>
           <button id="generateBtn" class="primary-button" type="button">生成分队</button>
-          <p id="hintText" class="hint">提示：自动分队后，可以用“移动”按钮把人员调整到其他队伍。</p>
+          <p id="hintText" class="hint">提示：自动分队后，可以拖动人员卡片到其他队伍。</p>
         </div>
       </section>
 

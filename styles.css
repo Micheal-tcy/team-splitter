@@ -53,6 +53,12 @@ button {
   margin-bottom: 24px;
 }
 
+.hero-actions {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
 .eyebrow {
   margin: 0 0 8px;
   color: var(--primary);
@@ -127,6 +133,29 @@ h3 {
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fff7e6;
+  color: #b54708;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sync-status.is-online {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.sync-status.is-error {
+  background: #fef3f2;
+  color: var(--danger);
 }
 
 .input-row {
@@ -399,6 +428,10 @@ button:disabled {
 
   .hero {
     display: grid;
+  }
+
+  .hero-actions {
+    justify-items: stretch;
   }
 
   .ghost-button {
