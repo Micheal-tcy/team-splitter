@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>队伍分配工具</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Team Splitter</p>
+          <h1>队伍分配工具</h1>
+          <p class="hero-text">维护人员名单，选择参与人员，按每队人数和队伍数量自动分队，并支持手动调整结果。</p>
+        </div>
+        <button id="resetDemoBtn" class="ghost-button" type="button">清空当前数据</button>
+      </section>
+
+      <section class="panel grid-two">
+        <div>
+          <div class="section-title">
+            <h2>人员名单</h2>
+            <span id="memberCount" class="pill">0 人</span>
+          </div>
+          <form id="addMemberForm" class="input-row">
+            <input id="memberNameInput" type="text" placeholder="输入姓名，例如：张三" autocomplete="off" />
+            <button type="submit">添加</button>
+          </form>
+          <div class="bulk-actions">
+            <button id="selectAllBtn" type="button">全选参与</button>
+            <button id="selectNoneBtn" type="button">全部取消</button>
+          </div>
+          <ul id="memberList" class="member-list" aria-label="人员名单"></ul>
+        </div>
+
+        <div>
+          <div class="section-title">
+            <h2>分队设置</h2>
+            <span id="selectedCount" class="pill">已选 0 人</span>
+          </div>
+          <div class="settings">
+            <label>
+              每队人数
+              <input id="teamSizeInput" type="number" min="1" value="3" />
+            </label>
+            <label>
+              队伍数量
+              <input id="teamCountInput" type="number" min="1" value="2" />
+            </label>
+          </div>
+          <label class="checkbox-row">
+            <input id="shuffleInput" type="checkbox" checked />
+            随机打乱参与人员后分队
+          </label>
+          <button id="generateBtn" class="primary-button" type="button">生成分队</button>
+          <p id="hintText" class="hint">提示：自动分队后，可以用“移动”按钮把人员调整到其他队伍。</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>分队结果</h2>
+          <span id="summaryText" class="pill">尚未生成</span>
+        </div>
+        <div id="teamsContainer" class="teams" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <h3>还没有分队结果</h3>
+        <p>先添加人员并选择参与者，然后点击“生成分队”。</p>
+      </div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
