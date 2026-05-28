@@ -68,11 +68,25 @@ function loadLocalState() {
   }
 }
 
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function loadCloudState() {
   setSyncStatus("正在同步云端...");
 
   try {
-    const response = await fetch(CLOUD_ENDPOINT, { cache: "no-store" });
+    const response = await fetchWithTimeout(CLOUD_ENDPOINT, { cache: "no-store" });
 
     if (response.status === 404) {
       await persistCloudState();
@@ -104,7 +118,7 @@ async function persistCloudState() {
   const snapshot = getSnapshot();
 
   try {
-    const response = await fetch(CLOUD_ENDPOINT, {
+    const response = await fetchWithTimeout(CLOUD_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -128,7 +142,7 @@ async function refreshCloudState() {
   if (pointerDrag) return;
 
   try {
-    const response = await fetch(CLOUD_ENDPOINT, { cache: "no-store" });
+    const response = await fetchWithTimeout(CLOUD_ENDPOINT, { cache: "no-store" });
     if (!response.ok) return;
 
     const snapshot = await response.json();
